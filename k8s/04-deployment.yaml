@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: demo-oidc-cp
+  labels: { app: keycloak }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: keycloak }
+  strategy:
+    type: Recreate   # H2 dev-file is single-writer; no rolling overlap
+  template:
+    metadata:
+      labels: { app: keycloak }
+      annotations:
+        # --- Vault Agent: render admin password + client secret into a file the
+        #     keycloak container sources at startup (uid 1000 owns it). ---
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: api
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-inject-containers: keycloak
+        vault.hashicorp.com/agent-run-as-user: "1000"
+        vault.hashicorp.com/agent-inject-secret-env: api/data/oidc-cp/config
+        vault.hashicorp.com/agent-inject-template-env: |
+          {{- with secret "api/data/oidc-cp/config" -}}
+          export KC_BOOTSTRAP_ADMIN_PASSWORD='{{ .Data.data.admin_password }}'
+          export CP_CLIENT_SECRET='{{ .Data.data.client_secret }}'
+          {{- end -}}
+        # --- Telemetry: scraped by the node-local OTel Agent. ---
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: app-vault-access
+      imagePullSecrets:
+        - name: harbor-creds
+      containers:
+        # ---------- Keycloak (HTTP on 8080, behind the TLS sidecar) ----------
+        - name: keycloak
+          image: harbor.harbor.svc.cluster.local/presales/keycloak:26.1
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              source /vault/secrets/env
+              mkdir -p /opt/keycloak/data/import
+              sed "s|__CLIENT_SECRET__|${CP_CLIENT_SECRET}|g" \
+                /realm-template/realm-export.json > /opt/keycloak/data/import/realm.json
+              exec /opt/keycloak/bin/kc.sh start --import-realm
+          env:
+            - { name: KC_DB,                  value: "dev-file" }
+            - { name: KC_HOSTNAME,            value: "https://keycloak.connected-cloud.io" }
+            - { name: KC_HOSTNAME_STRICT,     value: "true" }
+            - { name: KC_HTTP_ENABLED,        value: "true" }
+            - { name: KC_PROXY_HEADERS,       value: "xforwarded" }
+            - { name: KC_HEALTH_ENABLED,      value: "true" }
+            - { name: KC_METRICS_ENABLED,     value: "true" }
+            - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: "admin" }
+          ports:
+            - { name: http,       containerPort: 8080 }
+            - { name: management, containerPort: 9000 }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: management }
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /health/live, port: management }
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "200m", memory: "512Mi" }
+            limits:   { cpu: "1",    memory: "1Gi" }
+          volumeMounts:
+            - { name: realm-template, mountPath: /realm-template, readOnly: true }
+            - { name: kc-data,        mountPath: /opt/keycloak/data }
+        # ---------- nginx TLS terminator (443 -> keycloak:8080) ----------
+        - name: tls-proxy
+          image: harbor.harbor.svc.cluster.local/presales/nginx:alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: https, containerPort: 443 }
+          readinessProbe:
+            tcpSocket: { port: 443 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: "10m", memory: "16Mi" }
+            limits:   { cpu: "200m", memory: "64Mi" }
+          volumeMounts:
+            - { name: tls-certs,  mountPath: /etc/nginx/ssl,      readOnly: true }
+            - { name: nginx-conf, mountPath: /etc/nginx/conf.d,   readOnly: true }
+      volumes:
+        - name: realm-template
+          configMap: { name: keycloak-realm }
+        - name: nginx-conf
+          configMap: { name: keycloak-tls-proxy-conf }
+        - name: tls-certs
+          secret: { secretName: keycloak-tls }
+        - name: kc-data
+          emptyDir: {}

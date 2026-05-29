@@ -1,0 +1,86 @@
+# Realm import template. The client secret is a placeholder (__CLIENT_SECRET__)
+# rendered at pod startup from the Vault-injected value — the real secret is NEVER
+# committed to git. Safe to keep in a public repo.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  namespace: demo-oidc-cp
+data:
+  realm-export.json: |
+    {
+      "realm": "cp-demo",
+      "enabled": true,
+      "sslRequired": "external",
+      "registrationAllowed": false,
+      "accessTokenLifespan": 300,
+      "groups": [
+        { "name": "cp-admins", "path": "/cp-admins" }
+      ],
+      "clients": [
+        {
+          "clientId": "cp-oidc",
+          "name": "Control Plane OIDC client",
+          "enabled": true,
+          "protocol": "openid-connect",
+          "publicClient": false,
+          "secret": "__CLIENT_SECRET__",
+          "clientAuthenticatorType": "client-secret",
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "serviceAccountsEnabled": false,
+          "redirectUris": [
+            "https://da1e3f2d-1db0-4b67-8105-58894c41c07b.fwf.app/callback",
+            "http://localhost:3000/callback"
+          ],
+          "webOrigins": [
+            "https://da1e3f2d-1db0-4b67-8105-58894c41c07b.fwf.app"
+          ],
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "protocolMappers": [
+            {
+              "name": "groups",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-group-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "full.path": "false",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "userinfo.token.claim": "true",
+                "claim.name": "groups"
+              }
+            }
+          ]
+        }
+      ],
+      "users": [
+        {
+          "username": "admin-user",
+          "enabled": true,
+          "emailVerified": true,
+          "email": "admin-user@cp-demo.local",
+          "firstName": "Ada",
+          "lastName": "Admin",
+          "credentials": [
+            { "type": "password", "value": "password", "temporary": false }
+          ],
+          "groups": ["/cp-admins"]
+        },
+        {
+          "username": "plain-user",
+          "enabled": true,
+          "emailVerified": true,
+          "email": "plain-user@cp-demo.local",
+          "firstName": "Pat",
+          "lastName": "Plain",
+          "credentials": [
+            { "type": "password", "value": "password", "temporary": false }
+          ],
+          "groups": []
+        }
+      ]
+    }

@@ -1,0 +1,17 @@
+# cert-manager issues a Let's Encrypt cert via the Akamai DNS-01 solver
+# (letsencrypt-prod ClusterIssuer). cert-manager writes the ACME TXT record into
+# Akamai Edge DNS automatically; we only create the A record for live traffic.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keycloak-tls
+  namespace: demo-oidc-cp
+spec:
+  secretName: keycloak-tls
+  dnsNames:
+    - keycloak.connected-cloud.io
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  privateKey:
+    rotationPolicy: Always

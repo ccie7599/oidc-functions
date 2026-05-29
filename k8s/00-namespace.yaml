@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-oidc-cp
+  labels:
+    app.kubernetes.io/part-of: oidc-functions
+---
+# Service account the Vault Agent injector binds to (role "api" authorizes this
+# SA name in namespace demo-oidc-cp — see DEPLOYMENT.md).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-vault-access
+  namespace: demo-oidc-cp

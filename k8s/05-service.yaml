@@ -1,0 +1,21 @@
+# Linode NodeBalancer in TCP passthrough on 443 (TLS terminates at the nginx sidecar).
+# A NodeBalancer is acceptable here because this is an admin/IdP UI, not a high-throughput
+# data plane (see global infra guidance on reserving NBs for admin UIs).
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-nb
+  namespace: demo-oidc-cp
+  annotations:
+    service.beta.kubernetes.io/linode-loadbalancer-default-protocol: "tcp"
+    service.beta.kubernetes.io/linode-loadbalancer-port-443: '{"protocol": "tcp"}'
+    service.beta.kubernetes.io/linode-loadbalancer-throttle: "0"
+spec:
+  type: LoadBalancer
+  selector:
+    app: keycloak
+  ports:
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: 443

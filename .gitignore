@@ -5,3 +5,4 @@
 
 # Local env overrides (never commit real IdP creds)
 .env
+.spin-aka/
