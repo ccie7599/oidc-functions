@@ -1,0 +1,22 @@
+[package]
+name = "oidc-auth"
+version = "0.1.0"
+edition = "2021"
+authors = ["brian@apley.net"]
+description = "OIDC auth-code + PKCE component that gates a control-plane function (Spin)"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+spin-sdk = "3"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Pure-Rust crypto only — no `ring` (it needs clang to build for wasm32-wasip1).
+rsa = { version = "0.9", features = ["sha2"] }
+p256 = { version = "0.13", features = ["ecdsa"] }
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.2"
+form_urlencoded = "1"

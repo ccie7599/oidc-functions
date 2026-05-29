@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = ["components/oidc-auth", "components/cp-landing"]
+
+[profile.release]
+# Smaller, faster-to-load guest modules. Crypto cost is irrelevant at admin volume,
+# so optimize for size over speed (see DECISIONS.md ADR-0003).
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1

@@ -1,0 +1,13 @@
+[package]
+name = "cp-landing"
+version = "0.1.0"
+edition = "2021"
+authors = ["brian@apley.net"]
+description = "Protected control-plane landing page; only reachable via the oidc-auth component"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+spin-sdk = "3"
+anyhow = "1"

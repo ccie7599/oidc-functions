@@ -1,0 +1,68 @@
+spin_manifest_version = 2
+
+[application]
+name = "oidc-functions"
+version = "0.1.0"
+authors = ["brian@apley.net"]
+description = "OIDC auth-code + PKCE component gating a control-plane function (Spin / WASM)"
+
+# --- Per-tenant OIDC config. Defaults target the local Keycloak demo realm. ---
+# Override any of these for a real IdP without editing this file, e.g.:
+#   export SPIN_VARIABLE_ISSUER=https://your-org.okta.com/oauth2/default
+#   export SPIN_VARIABLE_CLIENT_SECRET=...
+# (SPIN_VARIABLE_<NAME> in UPPERCASE wins over the defaults below.)
+[variables]
+tenant            = { default = "default" }
+issuer            = { default = "http://localhost:8080/realms/cp-demo" }
+client_id         = { default = "cp-oidc" }
+client_secret     = { default = "cp-oidc-demo-secret", secret = true }
+redirect_uri      = { default = "http://localhost:3000/callback" }
+audience          = { default = "" }
+admin_group       = { default = "cp-admins" }
+scopes            = { default = "openid profile email" }
+session_ttl_secs  = { default = "3600" }
+# Shared secret oidc-auth presents to cp-landing over service chaining. Demo value;
+# override in any real deployment (export SPIN_VARIABLE_CP_FORWARD_SECRET=...).
+cp_forward_secret = { default = "demo-forward-secret-change-me", secret = true }
+
+# --- Public entry point: the auth component owns every user-facing route. ---
+[[trigger.http]]
+route = "/..."
+component = "oidc-auth"
+
+# --- Protected CP. Only reachable via service chaining + forwarding secret. ---
+[[trigger.http]]
+route = "/__cp/..."
+component = "cp-landing"
+
+[component.oidc-auth]
+source = "target/wasm32-wasip1/release/oidc_auth.wasm"
+# Outbound: the IdP (Keycloak on :8080, or any https IdP) + the CP via service chaining.
+allowed_outbound_hosts = [
+  "http://localhost:8080",
+  "https://*:443",
+  "http://cp-landing.spin.internal",
+]
+key_value_stores = ["default"]
+[component.oidc-auth.variables]
+tenant            = "{{ tenant }}"
+issuer            = "{{ issuer }}"
+client_id         = "{{ client_id }}"
+client_secret     = "{{ client_secret }}"
+redirect_uri      = "{{ redirect_uri }}"
+audience          = "{{ audience }}"
+admin_group       = "{{ admin_group }}"
+scopes            = "{{ scopes }}"
+session_ttl_secs  = "{{ session_ttl_secs }}"
+cp_forward_secret = "{{ cp_forward_secret }}"
+[component.oidc-auth.build]
+command = "cargo build --target wasm32-wasip1 --release -p oidc-auth"
+watch = ["components/oidc-auth/src/**/*.rs", "components/oidc-auth/Cargo.toml"]
+
+[component.cp-landing]
+source = "target/wasm32-wasip1/release/cp_landing.wasm"
+[component.cp-landing.variables]
+cp_forward_secret = "{{ cp_forward_secret }}"
+[component.cp-landing.build]
+command = "cargo build --target wasm32-wasip1 --release -p cp-landing"
+watch = ["components/cp-landing/src/**/*.rs", "components/cp-landing/Cargo.toml"]

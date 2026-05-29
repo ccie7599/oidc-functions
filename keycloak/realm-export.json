@@ -1,0 +1,72 @@
+{
+  "realm": "cp-demo",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginTheme": "keycloak",
+  "accessTokenLifespan": 300,
+  "groups": [
+    { "name": "cp-admins", "path": "/cp-admins" }
+  ],
+  "clients": [
+    {
+      "clientId": "cp-oidc",
+      "name": "Control Plane OIDC client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "cp-oidc-demo-secret",
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:3000/callback"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin-user",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin-user@cp-demo.local",
+      "firstName": "Ada",
+      "lastName": "Admin",
+      "credentials": [
+        { "type": "password", "value": "password", "temporary": false }
+      ],
+      "groups": ["/cp-admins"]
+    },
+    {
+      "username": "plain-user",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "plain-user@cp-demo.local",
+      "firstName": "Pat",
+      "lastName": "Plain",
+      "credentials": [
+        { "type": "password", "value": "password", "temporary": false }
+      ],
+      "groups": []
+    }
+  ]
+}
