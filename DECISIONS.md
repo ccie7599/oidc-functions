@@ -99,3 +99,36 @@ Google-as-OIDC has no usable groups claim; Ory Hydra needs a separate login/cons
 
 **Consequence:** none of the IdP coupling lives in code — switching to Okta/PingOne is
 Spin-variable config only (`issuer`/`client_id`/`client_secret`/`scopes`/`admin_group`).
+
+---
+
+## ADR-0006 — Deploy the app to Akamai Functions (FWF), Keycloak to the presales LZ
+
+**Status:** Accepted (deployment-session decision). See [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+The app runs on **FWF** (`spin aka app deploy`, config via `--variable`); Spin KV and
+component service chaining work there unchanged. The IdP needs a public HTTPS URL the FWF
+app can reach, so **Keycloak** is deployed to the shared LZ cluster `lke575271` per the LZ
+intake (Harbor image, Vault secrets, Argo CD GitOps, cert-manager DNS-01, OTel, catalog).
+The two are coupled only by URLs: app `issuer` = Keycloak URL, app `redirect_uri` = the
+FWF app URL — both injected as variables, nothing hard-coded.
+
+## ADR-0007 — Keycloak runs on H2 `dev-file`, single replica (demo tech debt)
+
+**Status:** Accepted with explicit tech debt.
+
+No external Postgres was provisioned; Keycloak uses embedded H2 (`KC_DB=dev-file`) on an
+`emptyDir`, single replica (`Recreate`). Acceptable because the realm re-imports on start
+and the *app's* sessions live in FWF KV, not Keycloak. **Not production-grade** — restart
+drops Keycloak state and re-creates the bootstrap admin. Promote to Postgres + PVC +
+multi-replica for anything beyond a demo IdP. Tracked in DEPLOYMENT.md.
+
+## ADR-0008 — Secrets in Vault; nothing sensitive in the public repo
+
+**Status:** Accepted.
+
+The repo is public, so the Keycloak admin password and the `cp-oidc` client secret live in
+Vault (`api/oidc-cp/config`), injected via Vault Agent and rendered into the realm at
+startup. The realm ConfigMap carries only a `__CLIENT_SECRET__` placeholder. `harbor-creds`
+and the Vault secret are created out-of-band (kubectl/vault), never committed. FWF receives
+the client secret as a deploy-time `--variable`, not from the manifest.

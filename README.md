@@ -12,6 +12,11 @@ path. The id_token is consumed and discarded — we never store it or any refres
 See [`scope.md`](scope.md) for the settled design and [`DECISIONS.md`](DECISIONS.md) for
 the architecture decisions (and tradeoffs taken for this build).
 
+> **Live reference deployment** — the app runs on Akamai Functions (FWF) in front of
+> Keycloak on the presales landing zone. URLs, topology, and ops notes are in
+> [`DEPLOYMENT.md`](DEPLOYMENT.md). If you want to put OIDC in front of *your* function,
+> start with [`docs/protect-your-function-with-oidc.md`](docs/protect-your-function-with-oidc.md).
+
 ## Architecture
 
 ```
