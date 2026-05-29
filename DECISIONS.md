@@ -132,3 +132,27 @@ Vault (`api/oidc-cp/config`), injected via Vault Agent and rendered into the rea
 startup. The realm ConfigMap carries only a `__CLIENT_SECRET__` placeholder. `harbor-creds`
 and the Vault secret are created out-of-band (kubectl/vault), never committed. FWF receives
 the client secret as a deploy-time `--variable`, not from the manifest.
+
+---
+
+## ADR-0009 — RP-initiated logout; retain the id_token server-side for `id_token_hint`
+
+**Status:** Accepted (supersedes the scope's "discard the id_token" and "SLO out of scope").
+
+**Problem:** local-only logout doesn't log the user out. `/logout` cleared our session and
+redirected to `/login`, but the IdP's own SSO cookie was still valid, so `/login` silently
+re-authenticated — the logout button appeared to do nothing.
+
+**Decision:** `/logout` now does **RP-initiated logout** — it redirects the browser to the
+IdP's `end_session_endpoint` (from discovery) so the IdP session ends too, with
+`post_logout_redirect_uri` back to `/login`.
+
+To avoid the IdP's logout-confirmation prompt (shown when no `id_token_hint` is supplied),
+we **retain the id_token in the server-side session** (`sess:{id}` in KV) and pass it as
+`id_token_hint`. The id_token is never exposed to the client — the cookie stays opaque — so
+the original "cookie reveals nothing / opaque session" property is unchanged. This reverses
+only the "consume and discard the id_token" sub-decision; the refresh token is still not stored.
+
+**IdP config:** the client must allow the post-logout redirect (`post.logout.redirect.uris`).
+Falls back to `client_id` (with confirmation prompt) if no id_token is on the session, and to
+local-only logout if the IdP advertises no `end_session_endpoint`.

@@ -38,6 +38,10 @@ pub struct TenantMeta {
     pub issuer: String,
     pub authorization_endpoint: String,
     pub token_endpoint: String,
+    /// RP-initiated logout endpoint (OIDC `end_session_endpoint`). Empty if the IdP
+    /// doesn't advertise one — then logout is local-only.
+    #[serde(default)]
+    pub end_session_endpoint: String,
     pub jwks_uri: String,
     pub keys: Vec<Jwk>,
     pub fetched_at: u64,
@@ -60,7 +64,10 @@ impl TenantMeta {
 }
 
 fn meta_key(cfg: &Config) -> String {
-    format!("jwks:{}", cfg.tenant)
+    // Version suffix: bump when the cached TenantMeta shape changes, to force a fresh
+    // discovery fetch instead of deserializing a stale record (e.g. adding
+    // end_session_endpoint). v2: added end_session_endpoint.
+    format!("jwks:v2:{}", cfg.tenant)
 }
 
 /// Return tenant metadata (endpoints + keys), refreshing from the IdP if stale/missing.
@@ -106,6 +113,12 @@ async fn refresh(store: &Store, cfg: &Config) -> Result<TenantMeta> {
     let authorization_endpoint = str_field(&disc, "authorization_endpoint")?;
     let token_endpoint = str_field(&disc, "token_endpoint")?;
     let jwks_uri = str_field(&disc, "jwks_uri")?;
+    // Optional — not every IdP advertises it.
+    let end_session_endpoint = disc
+        .get("end_session_endpoint")
+        .and_then(|x| x.as_str())
+        .unwrap_or_default()
+        .to_string();
 
     let (jwks, max_age) = get_json(&jwks_uri).await?;
     let keys: Vec<Jwk> = serde_json::from_value(
@@ -118,6 +131,7 @@ async fn refresh(store: &Store, cfg: &Config) -> Result<TenantMeta> {
         issuer,
         authorization_endpoint,
         token_endpoint,
+        end_session_endpoint,
         jwks_uri,
         keys,
         fetched_at: now_secs(),

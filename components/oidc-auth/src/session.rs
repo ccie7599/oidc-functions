@@ -20,6 +20,10 @@ pub struct Session {
     pub idp_tenant: String,
     /// Our own expiry (unix secs). The authority — checked on every request.
     pub exp: u64,
+    /// Kept server-side only (never sent to the client) so /logout can pass it as
+    /// `id_token_hint` for clean RP-initiated logout without an IdP confirmation page.
+    #[serde(default)]
+    pub id_token: String,
 }
 
 /// Mint a fresh session, persist `sess:{id}`, return (id, session).
@@ -29,6 +33,7 @@ pub fn create(
     sub: String,
     email: String,
     groups: Vec<String>,
+    id_token: String,
 ) -> Result<(String, Session)> {
     let id = random_token(32)?; // 256 bits of opaque id
     let sess = Session {
@@ -37,6 +42,7 @@ pub fn create(
         groups,
         idp_tenant: cfg.tenant.clone(),
         exp: now_secs() + cfg.session_ttl_secs,
+        id_token,
     };
     store.set(&sess_key(&id), &serde_json::to_vec(&sess)?)?;
     Ok((id, sess))

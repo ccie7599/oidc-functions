@@ -38,7 +38,8 @@ data:
             "https://da1e3f2d-1db0-4b67-8105-58894c41c07b.fwf.app"
           ],
           "attributes": {
-            "pkce.code.challenge.method": "S256"
+            "pkce.code.challenge.method": "S256",
+            "post.logout.redirect.uris": "https://da1e3f2d-1db0-4b67-8105-58894c41c07b.fwf.app/*"
           },
           "protocolMappers": [
             {

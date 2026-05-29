@@ -40,7 +40,7 @@ async fn dispatch(req: Request) -> Result<Response> {
     match path.as_str() {
         "/login" => login(&req, &cfg, &store).await,
         "/callback" => callback(&req, &cfg, &store).await,
-        "/logout" => logout(&req, &store),
+        "/logout" => logout(&req, &cfg, &store).await,
         _ => protected(&req, &cfg, &store).await,
     }
 }
@@ -94,13 +94,15 @@ async fn callback(req: &Request, cfg: &Config, store: &Store) -> Result<Response
     let jwk = jwks::signing_key(store, cfg, kid.as_deref()).await?;
     let claims = jwt::validate(&id_token, &jwk, cfg, &pkce.nonce)?;
 
-    // Mint our own opaque session; the id_token is now consumed and discarded.
+    // Mint our own opaque session. We keep the id_token server-side (only) so /logout
+    // can do clean RP-initiated logout via id_token_hint.
     let (sid, _sess) = session::create(
         store,
         cfg,
         claims.sub,
         claims.email,
         claims.groups,
+        id_token,
     )?;
 
     redirect_with_cookie(
@@ -150,13 +152,50 @@ async fn exchange_code(
 }
 
 // ---------------------------------------------------------------------------
-// /logout (local session delete only — IdP SLO is out of scope)
+// /logout — delete our session AND end the IdP SSO session (RP-initiated logout).
+// Without the IdP hop, /login would silently re-authenticate from the IdP's SSO
+// cookie and the user would never actually be logged out.
 // ---------------------------------------------------------------------------
-fn logout(req: &Request, store: &Store) -> Result<Response> {
-    if let Some(sid) = session_id(req) {
-        session::revoke(store, &sid)?;
+async fn logout(req: &Request, cfg: &Config, store: &Store) -> Result<Response> {
+    // Look the session up first so we can hand the IdP an id_token_hint, then revoke it.
+    let id_token_hint = match session_id(req) {
+        Some(sid) => {
+            let hint = session::lookup(store, &sid)?.map(|s| s.id_token);
+            session::revoke(store, &sid)?;
+            hint
+        }
+        None => None,
+    };
+    let clear = session::clear_cookie();
+
+    // Send the browser to the IdP's end_session_endpoint so its SSO session ends too —
+    // otherwise /login silently re-authenticates from the IdP's SSO cookie.
+    let meta = jwks::get_meta(store, cfg).await?;
+    if meta.end_session_endpoint.is_empty() {
+        return redirect_with_cookie("/login", &clear); // IdP has no logout endpoint
     }
-    redirect_with_cookie("/login", &session::clear_cookie())
+    // id_token_hint lets the IdP log out immediately (no confirmation prompt) and
+    // validates the post_logout_redirect_uri against the token's client.
+    let post_logout = format!("{}/login", app_base(cfg));
+    let mut ser = form_urlencoded::Serializer::new(String::new());
+    ser.append_pair("post_logout_redirect_uri", &post_logout);
+    match &id_token_hint {
+        Some(t) if !t.is_empty() => {
+            ser.append_pair("id_token_hint", t);
+        }
+        _ => {
+            ser.append_pair("client_id", &cfg.client_id);
+        }
+    }
+    redirect_with_cookie(&format!("{}?{}", meta.end_session_endpoint, ser.finish()), &clear)
+}
+
+/// The app's public base URL, derived from `redirect_uri` (…/callback → …).
+fn app_base(cfg: &Config) -> String {
+    cfg.redirect_uri
+        .strip_suffix("/callback")
+        .unwrap_or(&cfg.redirect_uri)
+        .to_string()
 }
 
 // ---------------------------------------------------------------------------

@@ -21,8 +21,10 @@ Supported IdPs: **Okta** and **PingFederate / PingOne** (any OIDC-compliant prov
 - **Stateful sessions in Spin KV** (not stateless self-signed JWT). Reason: admin CP requires
   *immediate revocation*; per-request KV lookup cost is irrelevant at admin-access volume.
 - **IdP signature validated once, at callback.** After that the session is ours (opaque cookie +
-  KV record + our own expiry). No per-request JWKS work on the hot path. The id_token is consumed
-  and discarded — we do NOT store it, and we do NOT store the IdP refresh token.
+  KV record + our own expiry). No per-request JWKS work on the hot path. We do NOT store the
+  IdP refresh token. (Update: the id_token IS now retained server-side in the session — never
+  exposed to the client — solely as the `id_token_hint` for clean RP-initiated logout. See
+  DECISIONS.md ADR-0009.)
 - **No token refresh.** Short session lifetime (~1h); re-auth through IdP on expiry.
 
 ## Prior art (context — none is a drop-in)
@@ -172,4 +174,5 @@ Key all of these by tenant so one component serves multiple customers' IdPs:
 - Token refresh / offline_access.
 - Edge-terminated auth (auth EdgeWorker injecting signed identity) — viable for fronting many
   functions, but rejected here for a single admin CP to keep the trust boundary tight.
-- Logout from the IdP side (SLO) — local session delete only, unless added later.
+- ~~Logout from the IdP side (SLO) — local session delete only~~ — **added**: `/logout` now
+  does RP-initiated logout against the IdP `end_session_endpoint` (ADR-0009).
